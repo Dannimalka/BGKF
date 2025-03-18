@@ -1,70 +1,14 @@
--- BGKF: Sound System Module
+-- Update for SoundSystem.lua
+-- This function needs to be updated to work with the new KillFeed system
 
-local BGKF = LibStub("AceAddon-3.0"):GetAddon("BGKF")
-local SoundSystem = BGKF:NewModule("SoundSystem")
-
--- Module initialization
-function SoundSystem:OnInitialize()
-  -- Register available sounds
-  self.sounds = {
-    Kill = "Interface\\AddOns\\BGKF\\Sounds\\kill.ogg",
-    DoubleKill = "Interface\\AddOns\\BGKF\\Sounds\\doublekill.ogg",
-    TripleKill = "Interface\\AddOns\\BGKF\\Sounds\\triplekill.ogg",
-    UltraKill = "Interface\\AddOns\\BGKF\\Sounds\\ultrakill.ogg",
-    Rampage = "Interface\\AddOns\\BGKF\\Sounds\\rampage.ogg",
-    RankUp = "Interface\\AddOns\\BGKF\\Sounds\\rankup.ogg"
-  }
-
-  -- Initialize kill streak tracking
-  self.killStreaks = {}
-
-  -- Store in modules for easy access
-  BGKF.modules.SoundSystem = self
-end
-
--- Enable module
-function SoundSystem:OnEnable()
-  -- Reset kill streaks
-  self.killStreaks = {}
-end
-
--- Disable module
-function SoundSystem:OnDisable()
-  -- Nothing specific to do
-end
-
--- Get a list of available sounds
-function SoundSystem:GetSoundList()
-  local list = {}
-
-  for name, _ in pairs(self.sounds) do
-    list[name] = name
-  end
-
-  return list
-end
-
--- Play a specific sound
-function SoundSystem:PlaySound(soundName)
+-- Modify the PlayKillSound function to work with the improved kill detection
+function SoundSystem:PlayKillSound(playerName)
   if not BGKF.db.profile.sounds.enabled then
     return
   end
 
-  local soundFile = self.sounds[soundName]
-
-  if soundFile then
-    PlaySoundFile(soundFile, "Master", BGKF.db.profile.sounds.volume)
-  end
-end
-
--- Play rank up sound
-function SoundSystem:PlayRankUpSound()
-  self:PlaySound("RankUp")
-end
-
--- Play sound for kill streak
-function SoundSystem:PlayKillSound(playerName)
-  if not BGKF.db.profile.sounds.enabled then
+  -- Only play sounds for the player using the addon
+  if playerName ~= UnitName("player") then
     return
   end
 
@@ -88,54 +32,87 @@ function SoundSystem:PlayKillSound(playerName)
   streak.count = streak.count + 1
   streak.lastKill = currentTime
 
-  -- Determine which sound to play
-  local soundFile
-  if streak.count == 1 then
-    soundFile = "Kill"
-  elseif streak.count == 2 then
-    soundFile = "DoubleKill"
-  elseif streak.count == 3 then
-    soundFile = "TripleKill"
-  elseif streak.count == 4 then
-    soundFile = "UltraKill"
-  elseif streak.count >= 5 then
-    soundFile = "Rampage"
+  -- Get player's total kill count from the kill feed data
+  local killCount = 1
+  if BGKF.modules.KillFeed and
+      BGKF.modules.KillFeed.playerData and
+      BGKF.modules.KillFeed.playerData[playerName] then
+    killCount = BGKF.modules.KillFeed.playerData[playerName].killingBlows
+  end
+
+  -- Determine which sound to play based on kill count
+  local soundName = nil
+
+  -- First check if there's a special sound for this exact kill count
+  if self.killScoreSounds[killCount] then
+    soundName = self.killScoreSounds[killCount]
+  else
+    -- Otherwise use a sound based on streak
+    if streak.count == 1 then
+      -- For first kill in a streak, determine by kill count
+      if killCount >= 15 then
+        soundName = "Godlike"
+      elseif killCount >= 12 then
+        soundName = "Unstoppable"
+      elseif killCount >= 10 then
+        soundName = "Dominating"
+      elseif killCount >= 8 then
+        soundName = "Rampage"
+      elseif killCount >= 5 then
+        soundName = "KillingSpree"
+      elseif math.random(1, 10) == 1 then   -- 10% chance of headshot sound
+        soundName = "Headshot"
+      else
+        soundName = "FirstBlood"   -- Default to FirstBlood for single kills
+      end
+    elseif streak.count == 2 then
+      soundName = "DoubleKill"
+    elseif streak.count == 3 then
+      soundName = "TripleKill"
+    elseif streak.count == 4 then
+      soundName = "MultiKill"
+    elseif streak.count == 5 then
+      soundName = "MegaKill"
+    elseif streak.count == 6 then
+      soundName = "UltraKill"
+    elseif streak.count >= 7 then
+      soundName = "MonsterKill"
+    end
   end
 
   -- Play the sound
-  if soundFile then
-    self:PlaySound(soundFile)
+  if soundName then
+    self:PlaySound(soundName)
   end
 
   -- Announce for player's own streaks
-  if playerName == UnitName("player") and streak.count > 1 then
+  if streak.count > 1 then
     local streakText = ""
     if streak.count == 2 then
       streakText = "Double Kill!"
     elseif streak.count == 3 then
       streakText = "Triple Kill!"
     elseif streak.count == 4 then
-      streakText = "Ultra Kill!"
-    elseif streak.count >= 5 then
-      streakText = "RAMPAGE!"
+      streakText = "Multi Kill!"
+    elseif streak.count == 5 then
+      streakText = "Mega Kill!"
+    elseif streak.count == 6 then
+      streakText = "ULTRA KILL!"
+    elseif streak.count >= 7 then
+      streakText = "MONSTER KILL!!"
     end
 
     if streakText ~= "" then
       BGKF:Print(streakText)
     end
   end
-end
 
--- Reset kill streak for a player
-function SoundSystem:ResetKillStreak(playerName)
-  if self.killStreaks[playerName] then
-    self.killStreaks[playerName].count = 0
-    BGKF:Print("Reset kill streak for " .. playerName)
+  -- Also print kill count milestone announcements
+  if killCount == 5 then
+    BGKF:Print("Killing Spree!")
+  elseif killCount == 10 then
+    BGKF:Print("DOMINATING!")
+  elseif killCount == 15 then
+    BGKF:Print("GODLIKE!!")
   end
-end
-
--- Update configuration (called when settings change)
-function SoundSystem:UpdateConfig()
-  -- Nothing specific to update here
-  -- Sound settings are checked when playing sounds
 end

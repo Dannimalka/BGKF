@@ -41,7 +41,12 @@ function Config:OnInitialize()
             type = "execute",
             order = 3,
             func = function()
-              BGKF:StartTestMode()
+              -- Make sure we call the function on the KillFeed module, not on BGKF directly
+              if BGKF.modules.KillFeed and BGKF.modules.KillFeed.StartTestMode then
+                BGKF.modules.KillFeed:StartTestMode()
+              else
+                BGKF:Print("Error: KillFeed module not found or StartTestMode function not available")
+              end
             end
           }
         }
@@ -135,7 +140,7 @@ function Config:OnInitialize()
             min = 8,
             max = 24,
             step = 1,
-            order = 6,
+            order = 7,
             get = function() return BGKF.db.profile.killFeed.fontSize end,
             set = function(_, value)
               BGKF.db.profile.killFeed.fontSize = value
@@ -148,7 +153,7 @@ function Config:OnInitialize()
             name = "Show Faction Icons",
             desc = "Show faction icons next to player names",
             type = "toggle",
-            order = 7,
+            order = 8,
             get = function() return BGKF.db.profile.killFeed.showIcons end,
             set = function(_, value)
               BGKF.db.profile.killFeed.showIcons = value
@@ -161,7 +166,7 @@ function Config:OnInitialize()
             name = "Show Timestamps",
             desc = "Show timestamps for each kill",
             type = "toggle",
-            order = 8,
+            order = 9,
             get = function() return BGKF.db.profile.killFeed.showTimestamp end,
             set = function(_, value)
               BGKF.db.profile.killFeed.showTimestamp = value
@@ -175,7 +180,7 @@ function Config:OnInitialize()
             desc = "Color and transparency of the kill feed background",
             type = "color",
             hasAlpha = true,
-            order = 9,
+            order = 10,
             get = function()
               local bg = BGKF.db.profile.killFeed.backgroundColor
               return bg.r, bg.g, bg.b, bg.a
@@ -185,6 +190,28 @@ function Config:OnInitialize()
               bg.r, bg.g, bg.b, bg.a = r, g, b, a
               if BGKF.modules.KillFeed and BGKF.modules.KillFeed.UpdateLayout then
                 BGKF.modules.KillFeed:UpdateLayout()
+              end
+            end
+          },
+          advancedHeader = {
+            name = "Advanced Settings",
+            type = "header",
+            order = 11
+          },
+          updateFrequency = {
+            name = "Update Frequency",
+            desc = "How often to check for new kills (in seconds)",
+            type = "range",
+            min = 0.1,
+            max = 5.0,
+            step = 0.1,
+            order = 12,
+            get = function() return BGKF.db.profile.killFeed.updateFrequency end,
+            set = function(_, value)
+              BGKF.db.profile.killFeed.updateFrequency = value
+              -- Update timer if KillFeed module is active
+              if BGKF.modules.KillFeed and BGKF.modules.KillFeed.UpdateScoreTimer then
+                BGKF.modules.KillFeed:UpdateScoreTimer()
               end
             end
           }
@@ -278,15 +305,15 @@ function Config:OnInitialize()
               BGKF.db.profile.sounds.volume = value
             end
           },
-          killSound = {
-            name = "Kill Sound",
-            desc = "Sound to play on a kill",
+          firstBloodSound = {
+            name = "First Kill Sound",
+            desc = "Sound to play on a single kill",
             type = "select",
             values = function()
               if BGKF.modules.SoundSystem then
                 return BGKF.modules.SoundSystem:GetSoundList()
               else
-                return { Kill = "Kill" }
+                return { FirstBlood = "FirstBlood" }
               end
             end,
             order = 4,
@@ -297,26 +324,52 @@ function Config:OnInitialize()
                 BGKF.modules.SoundSystem:PlaySound(value)
               end
             end
+          },
+          soundDesc = {
+            name =
+            "Sounds will play automatically based on your kill count and kill streaks:\n• Single Kill: FirstBlood or random Headshot\n• 2 Kills in a row: DoubleKill\n• 3 Kills in a row: TripleKill\n• 4 Kills in a row: MultiKill\n• 5 Kills in a row: MegaKill\n• 6 Kills in a row: UltraKill\n• 7+ Kills in a row: MonsterKill\n\nTotal score milestones:\n• 5 Total Kills: KillingSpree\n• 8 Total Kills: Rampage\n• 10 Total Kills: Dominating\n• 12 Total Kills: Unstoppable\n• 15+ Total Kills: Godlike",
+            type = "description",
+            order = 5,
+            fontSize = "medium"
           }
         }
       }
     }
   }
 
-  -- Add rank name configuration
+  -- Add alliance rank display
+  options.args.ranks.args.allianceRanksHeader = {
+    name = "Alliance Ranks",
+    type = "header",
+    order = 10
+  }
+
   for i = 1, 10 do
-    options.args.ranks.args["rank" .. i] = {
-      name = "Rank " .. i .. " Name",
-      desc = "Name for rank " .. i,
-      type = "input",
-      order = 5 + i,
-      get = function() return BGKF.db.profile.ranks.rankNames[i] end,
-      set = function(_, value)
-        BGKF.db.profile.ranks.rankNames[i] = value
-        if BGKF.modules.Nameplates and BGKF.modules.Nameplates.UpdateAllNameplates then
-          BGKF.modules.Nameplates:UpdateAllNameplates()
-        end
-      end
+    options.args.ranks.args["allianceRank" .. i] = {
+      name = "Rank " .. i,
+      desc = "Alliance rank " .. i,
+      type = "description",
+      order = 10 + i,
+      width = "full",
+      fontSize = "medium"
+    }
+  end
+
+  -- Add horde rank display
+  options.args.ranks.args.hordeRanksHeader = {
+    name = "Horde Ranks",
+    type = "header",
+    order = 30
+  }
+
+  for i = 1, 10 do
+    options.args.ranks.args["hordeRank" .. i] = {
+      name = "Rank " .. i,
+      desc = "Horde rank " .. i,
+      type = "description",
+      order = 30 + i,
+      width = "full",
+      fontSize = "medium"
     }
   end
 
@@ -337,7 +390,7 @@ end
 function Config:UpdateConfig()
   -- Update rank display info
   if BGKF.modules.RankSystem then
-    local options = AceConfig.GetOptionsTable("BGKF")
+    local options = AceConfig:GetOptionsTable("BGKF")
 
     -- Update Alliance ranks
     for i = 1, 10 do

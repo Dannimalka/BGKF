@@ -6,6 +6,7 @@ local BGKF = LibStub("AceAddon-3.0"):NewAddon("BGKF", "AceConsole-3.0", "AceEven
 
 -- Store modules for easy access
 BGKF.modules = {}
+BGKF.inTestMode = false
 
 -- Defaults for saved variables
 BGKF.defaults = {
@@ -26,7 +27,8 @@ BGKF.defaults = {
       fontSize = 12,
       showIcons = true,
       showTimestamp = true,
-      backgroundColor = { r = 0, g = 0, b = 0, a = 0.5 }
+      backgroundColor = { r = 0, g = 0, b = 0, a = 0.5 },
+      updateFrequency = 1.0
     },
     sounds = {
       enabled = true,
@@ -57,10 +59,14 @@ BGKF.defaults = {
   }
 }
 
+
+
 -- Addon initialization
 function BGKF:OnInitialize()
   -- Set up database
   self.db = LibStub("AceDB-3.0"):New("BGKFDB", self.defaults)
+
+  self.inTestMode = false
 
   -- Register chat commands
   self:RegisterChatCommand("bgkf", "ChatCommand")
@@ -82,21 +88,49 @@ end
 
 -- Check if player is in a battleground
 function BGKF:CheckBattleground()
-  local inBattleground = C_PvP.IsBattleground()
+  if self.inTestMode then
+    return
+  end
+  -- Check if we're in a battleground
+  local inInstance, instanceType = IsInInstance()
+  local inBattleground = (instanceType == "pvp")
 
-  if inBattleground and self.db.profile.enabled then
-    -- Enable all modules
-    for name, module in pairs(self.modules) do
-      if module.Enable then
-        module:Enable()
+  -- Enable/disable modules based on battleground status
+  if inBattleground then
+    -- We're in a battleground, make sure all the modules are enabled
+    if BGKF.db.profile.enabled then
+      if BGKF.modules.KillFeed and not BGKF.modules.KillFeed:IsEnabled() then
+        BGKF.modules.KillFeed:Enable()
+      end
+
+      if BGKF.modules.RankSystem and not BGKF.modules.RankSystem:IsEnabled() then
+        BGKF.modules.RankSystem:Enable()
+      end
+
+      if BGKF.modules.SoundSystem and not BGKF.modules.SoundSystem:IsEnabled() then
+        BGKF.modules.SoundSystem:Enable()
+      end
+
+      if BGKF.db.profile.ranks.showOnNameplates and BGKF.modules.Nameplates and not BGKF.modules.Nameplates:IsEnabled() then
+        BGKF.modules.Nameplates:Enable()
       end
     end
   else
-    -- Disable all modules except config
-    for name, module in pairs(self.modules) do
-      if name ~= "Config" and module.Disable then
-        module:Disable()
-      end
+    -- We're not in a battleground, disable all modules
+    if BGKF.modules.KillFeed and BGKF.modules.KillFeed:IsEnabled() then
+      BGKF.modules.KillFeed:Disable()
+    end
+
+    if BGKF.modules.RankSystem and BGKF.modules.RankSystem:IsEnabled() then
+      BGKF.modules.RankSystem:Disable()
+    end
+
+    if BGKF.modules.SoundSystem and BGKF.modules.SoundSystem:IsEnabled() then
+      BGKF.modules.SoundSystem:Disable()
+    end
+
+    if BGKF.modules.Nameplates and BGKF.modules.Nameplates:IsEnabled() then
+      BGKF.modules.Nameplates:Disable()
     end
   end
 end
@@ -118,6 +152,18 @@ function BGKF:OnEnable()
   self:RegisterEvent("PLAYER_ENTERING_WORLD", "CheckBattleground")
   self:RegisterEvent("ZONE_CHANGED_NEW_AREA", "CheckBattleground")
   self:CheckBattleground()
+  self:SchedulePeriodicCheck()
+end
+
+function BGKF:SchedulePeriodicCheck()
+  -- Cancel any existing timer first
+  if self.bgCheckTimer then
+    self:CancelTimer(self.bgCheckTimer)
+    self.bgCheckTimer = nil
+  end
+
+  -- Set up a new timer to check every 5 seconds
+  self.bgCheckTimer = self:ScheduleRepeatingTimer("CheckBattleground", 100)
 end
 
 -- When addon is disabled
@@ -133,7 +179,19 @@ function BGKF:OnDisable()
 end
 
 -- Test mode to simulate battleground events
+-- Test mode to simulate battleground events
 function BGKF:StartTestMode()
+  -- Set test mode flag at the beginning
+  self.inTestMode = true
+
+  -- Unregister events that might trigger battleground checks
+  self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+  self:UnregisterEvent("ZONE_CHANGED_NEW_AREA")
+
+  if not self.modules.KillFeed:IsEnabled() then
+    self.modules.KillFeed:Enable() -- Enable module if disabled
+  end
+
   -- Make sure all modules are enabled
   self:Print("Starting test mode...")
 
@@ -144,7 +202,19 @@ function BGKF:StartTestMode()
   for name, module in pairs(self.modules) do
     if module.Enable then
       module:Enable()
+
+      -- Prevent modules from disabling themselves during test mode
+      if module.CheckBattleground then
+        module.originalCheckBattleground = module.CheckBattleground
+        module.CheckBattleground = function() return true end
+      end
     end
+  end
+
+  -- Disable the periodic check during test mode
+  if self.bgCheckTimer then
+    self:CancelTimer(self.bgCheckTimer)
+    self.bgCheckTimer = nil
   end
 
   -- Disable timer that checks battlefield scores to prevent duplicate entries
@@ -156,20 +226,38 @@ function BGKF:StartTestMode()
   -- Fake player data
   self.testData = {
     alliancePlayers = {
-      { name = "AllyWarrior", class = "warrior", faction = 1, race = "Human",    kills = 0, deaths = 0 },
-      { name = "AllyPaladin", class = "paladin", faction = 1, race = "Dwarf",    kills = 0, deaths = 0 },
-      { name = "AllyHunter",  class = "hunter",  faction = 1, race = "NightElf", kills = 0, deaths = 0 },
-      { name = "AllyRogue",   class = "rogue",   faction = 1, race = "Human",    kills = 0, deaths = 0 },
-      { name = "AllyPriest",  class = "priest",  faction = 1, race = "Human",    kills = 0, deaths = 0 }
+      { name = "AllyWarrior", class = "Warrior", faction = 1, race = "Human",    kills = 0, deaths = 0 },
+      { name = "AllyPaladin", class = "Paladin", faction = 1, race = "Dwarf",    kills = 0, deaths = 0 },
+      { name = "AllyHunter",  class = "Hunter",  faction = 1, race = "NightElf", kills = 0, deaths = 0 },
+      { name = "AllyRogue",   class = "Rogue",   faction = 1, race = "Human",    kills = 0, deaths = 0 },
+      { name = "AllyPriest",  class = "Priest",  faction = 1, race = "Human",    kills = 0, deaths = 0 }
     },
     hordePlayers = {
-      { name = "HordeWarrior", class = "warrior", faction = 0, race = "Orc",    kills = 0, deaths = 0 },
-      { name = "HordeShaman",  class = "shaman",  faction = 0, race = "Troll",  kills = 0, deaths = 0 },
-      { name = "HordeHunter",  class = "hunter",  faction = 0, race = "Orc",    kills = 0, deaths = 0 },
-      { name = "HordeWarlock", class = "warlock", faction = 0, race = "Undead", kills = 0, deaths = 0 },
-      { name = "HordeDruid",   class = "druid",   faction = 0, race = "Tauren", kills = 0, deaths = 0 }
+      { name = "HordeWarrior", class = "Warrior", faction = 0, race = "Orc",    kills = 0, deaths = 0 },
+      { name = "HordeShaman",  class = "Shaman",  faction = 0, race = "Troll",  kills = 0, deaths = 0 },
+      { name = "HordeHunter",  class = "Hunter",  faction = 0, race = "Orc",    kills = 0, deaths = 0 },
+      { name = "HordeWarlock", class = "Warlock", faction = 0, race = "Undead", kills = 0, deaths = 0 },
+      { name = "HordeDruid",   class = "Druid",   faction = 0, race = "Tauren", kills = 0, deaths = 0 }
     }
   }
+
+  -- Initialize player data for all test players
+  if self.modules.KillFeed then
+    -- Initialize all test players in the KillFeed player data
+    for _, faction in pairs({ "alliancePlayers", "hordePlayers" }) do
+      for _, player in ipairs(self.testData[faction]) do
+        self.modules.KillFeed.playerData[player.name] = {
+          killingBlows = player.kills,
+          honorableKills = 0,
+          deaths = player.deaths,
+          faction = player.faction,
+          race = player.race,
+          class = player.class,
+          lastUpdated = GetTime()
+        }
+      end
+    end
+  end
 
   -- Simulate kills every few seconds
   local testTimer = self:ScheduleRepeatingTimer(function()
@@ -184,84 +272,79 @@ function BGKF:StartTestMode()
     local killer = killerList[killerIndex]
     local victim = victimList[victimIndex]
 
-    -- Reset victim kill streak and kills if they had kills
-    if victim.kills > 0 then
-      -- Reset the kill count
-      victim.kills = 0
-
-      -- Reset the sound streak
-      if self.modules.SoundSystem then
-        self.modules.SoundSystem:ResetKillStreak(victim.name)
-      end
-    end
-
     -- Update kill and death counts
     killer.kills = killer.kills + 1
     victim.deaths = victim.deaths + 1
 
-    -- Directly add kill to feed in test mode
+    -- Update player data
     if self.modules.KillFeed then
-      -- Initialize player data if needed
-      if not self.modules.KillFeed.playerData[killer.name] then
-        self.modules.KillFeed.playerData[killer.name] = {
-          killingBlows = killer.kills,
-          honorableKills = 0,
-          deaths = killer.deaths,
-          faction = killer.faction,
-          race = killer.race,
-          class = killer.class,
-          lastUpdated = GetTime()
-        }
-      else
-        -- Update existing player data
-        self.modules.KillFeed.playerData[killer.name].killingBlows = killer.kills
-      end
+      -- Update existing player data
+      self.modules.KillFeed.playerData[killer.name].killingBlows = killer.kills
+      self.modules.KillFeed.playerData[victim.name].deaths = victim.deaths
 
-      if not self.modules.KillFeed.playerData[victim.name] then
-        self.modules.KillFeed.playerData[victim.name] = {
-          killingBlows = victim.kills,
-          honorableKills = 0,
-          deaths = victim.deaths,
-          faction = victim.faction,
-          race = victim.race,
-          class = victim.class,
-          lastUpdated = GetTime()
-        }
-      else
-        -- Update existing player data
-        self.modules.KillFeed.playerData[victim.name].killingBlows = victim.kills
-        self.modules.KillFeed.playerData[victim.name].deaths = victim.deaths
+      -- Reset victim kills if resetOnDeath is enabled
+      if self.db.profile.ranks.resetOnDeath then
+        victim.kills = 0
+        self.modules.KillFeed.playerData[victim.name].killingBlows = 0
       end
+    end
 
-      -- Add the kill to the feed
+    -- Update ranks first
+    if self.modules.RankSystem then
+      self.modules.RankSystem:UpdateRank(killer.name, 1)
+      if self.db.profile.ranks.resetOnDeath then
+        self.modules.RankSystem:UpdateRank(victim.name, 0)
+      end
+    end
+
+    -- Add the kill to the feed
+    if self.modules.KillFeed then
       self.modules.KillFeed:AddKill(killer.name, killer.class, victim.name, victim.class)
+    end
 
-      -- Update ranks
-      if self.modules.RankSystem then
-        self.modules.RankSystem:UpdateRank(killer.name, 1)
-        if self.db.profile.ranks.resetOnDeath then
-          self.modules.RankSystem:UpdateRank(victim.name, 0)
-        end
-      end
+    -- Play sound
+    if self.modules.SoundSystem then
+      self.modules.SoundSystem:PlayKillSound(killer.name)
 
-      -- Play sound
-      if self.modules.SoundSystem then
-        self.modules.SoundSystem:PlayKillSound(killer.name)
-      end
+      -- Reset the sound streak for victim if they died
+      self.modules.SoundSystem:ResetKillStreak(victim.name)
+    end
+
+    -- Force update nameplates to show the new ranks
+    if self.modules.Nameplates then
+      self.modules.Nameplates:UpdateAllNameplates()
     end
 
     -- Print to chat for debugging
     self:Print(killer.name .. " [" .. killer.kills .. "] killed " .. victim.name .. " [" .. victim.kills .. "]")
-  end, 3)   -- Trigger every 3 seconds
+  end, 3) -- Trigger every 3 seconds
 
   -- Stop test after 60 seconds
   self:ScheduleTimer(function()
     self:CancelTimer(testTimer)
     self:Print("Test mode finished.")
 
+    -- Reset test mode flag
+    self.inTestMode = false
+
     -- Restore original API
     GetNumBattlefieldScores = self.originalGetNumBattlefieldScores
     GetBattlefieldScore = self.originalGetBattlefieldScore
+
+    -- Restore original module functions
+    for name, module in pairs(self.modules) do
+      if module.originalCheckBattleground then
+        module.CheckBattleground = module.originalCheckBattleground
+        module.originalCheckBattleground = nil
+      end
+    end
+
+    -- Re-register battleground events
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "CheckBattleground")
+    self:RegisterEvent("ZONE_CHANGED_NEW_AREA", "CheckBattleground")
+
+    -- Re-enable the periodic check
+    self:SchedulePeriodicCheck()
 
     -- Disable all modules except config
     for name, module in pairs(self.modules) do
@@ -302,21 +385,21 @@ function BGKF:SetupFakeBattlefieldAPI()
     local player = allPlayers[index]
 
     -- Return values in the same order as the API
-    return player.name,        -- name
-        player.kills,          -- killingBlows
-        0,                     -- honorableKills
-        player.deaths,         -- deaths
-        0,                     -- honorGained
-        player.faction,        -- faction
-        player.race,           -- race
-        player.class,          -- class (lowercase class name like 'warrior')
-        0,                     -- damageDone
-        0,                     -- healingDone
-        0,                     -- bgRating
-        0,                     -- ratingChange
-        0,                     -- preMatchMMR
-        0,                     -- mmrChange
-        player.class           -- talentSpec
+    return player.name, -- name
+        player.kills,   -- killingBlows
+        0,              -- honorableKills
+        player.deaths,  -- deaths
+        0,              -- honorGained
+        player.faction, -- faction
+        player.race,    -- race
+        player.class,   -- class (lowercase class name like 'warrior')
+        0,              -- damageDone
+        0,              -- healingDone
+        0,              -- bgRating
+        0,              -- ratingChange
+        0,              -- preMatchMMR
+        0,              -- mmrChange
+        player.class    -- talentSpec
   end
 end
 

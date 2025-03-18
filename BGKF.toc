@@ -1,7 +1,7 @@
 ## Interface: 110105
 ## Title: BGKF - Battleground Kill Feed
 ## Notes: Displays kill feeds in battlegrounds similar to CS:GO
-## Author: BiniBini
+## Author: NEffy
 ## Version: 1.0
 ## SavedVariables: BGKFDB
 
