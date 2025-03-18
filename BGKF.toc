@@ -1,0 +1,28 @@
+## Interface: 110105
+## Title: BGKF - Battleground Kill Feed
+## Notes: Displays kill feeds in battlegrounds similar to CS:GO
+## Author: BiniBini
+## Version: 1.0
+## SavedVariables: BGKFDB
+
+# Libraries
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\AceAddon-3.0\AceAddon-3.0.lua
+Libs\AceConsole-3.0\AceConsole-3.0.lua
+Libs\AceEvent-3.0\AceEvent-3.0.lua
+Libs\AceTimer-3.0\AceTimer-3.0.lua
+Libs\AceDB-3.0\AceDB-3.0.lua
+Libs\AceConfig-3.0\AceConfig-3.0.lua
+Libs\AceConfig-3.0\AceConfigDialog-3.0.lua
+Libs\AceConfig-3.0\AceConfigCmd-3.0.lua
+Libs\AceGUI-3.0\AceGUI-3.0.lua
+Libs\AceLocale-3.0\AceLocale-3.0.lua
+
+# Core files
+BGKF.lua
+Config.lua
+KillFeed.lua
+RankSystem.lua
+SoundSystem.lua
+Nameplates.lua
