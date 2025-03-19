@@ -1,6 +1,6 @@
-## Interface: 110105
+## Interface: 110100
 ## Title: BGKF - Battleground Kill Feed
-## Notes: Displays kill feeds in battlegrounds similar to CS:GO
+## Notes: BGKF adds an immersive CS:GO-style kill feed to your battlegrounds with dynamic rank progression, class-colored notifications, and iconic announcer sounds.
 ## Author: Neffy
 ## Version: 1.0
 ## SavedVariables: BGKFDB
