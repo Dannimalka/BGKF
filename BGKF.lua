@@ -12,16 +12,17 @@ BGKF.inTestMode = false
 BGKF.defaults = {
   profile = {
     enabled = true,
+    debugMode = false,
     killFeed = {
-      width = 300,
-      height = 400,
+      width = 400,
+      height = 190,
       position = {
         point = "CENTER",
         relativePoint = "CENTER",
         xOffset = 0,
         yOffset = 0
       },
-      entries = 30,
+      entries = 9,
       fadeTime = 30,
       permanentKills = false,
       fontSize = 12,
@@ -32,7 +33,7 @@ BGKF.defaults = {
     },
     sounds = {
       enabled = true,
-      volume = 0.5,
+      volume = 0.4,
       killSound = "Kill",
       doubleKillSound = "DoubleKill",
       tripleKillSound = "TripleKill",
@@ -70,9 +71,37 @@ function BGKF:OnInitialize()
 
   -- Register chat commands
   self:RegisterChatCommand("bgkf", "ChatCommand")
+  self.debugMode = BGKF.db.profile.debugMode
 
   -- Print initialization message
   self:Print("Battleground Kill Feed loaded. Type /bgkf to access settings.")
+  for name, module in pairs(self.modules) do
+    if module.debugMode ~= nil then
+      module.debugMode = self.db.profile.debug
+    end
+  end
+end
+
+function BGKF:NormalizePlayerName(name)
+  if not name then return nil end
+
+  -- Strip realm name if present (remove anything after and including a hyphen)
+  local baseName = name:gsub("%-[^-]+$", "")
+
+  -- Remove any whitespace
+  baseName = baseName:gsub("%s+", "")
+
+  -- Return the normalized name
+  return baseName
+end
+
+function BGKF:UpdateDebugMode(enabled)
+  -- Update debug mode in all modules that support it
+  for name, module in pairs(self.modules) do
+    if enabled then
+      self:Print(name .. " debug mode " .. (enabled and "enabled" or "disabled"))
+    end
+  end
 end
 
 -- Handle slash commands

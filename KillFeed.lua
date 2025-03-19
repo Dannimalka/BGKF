@@ -18,6 +18,9 @@ function KillFeed:OnInitialize()
   self.processedKills = {} -- Already processed kill IDs
   self:RegisterMessage("BGKF_RANK_CHANGED", "OnRankChanged")
 
+  -- debug mode
+  self.debugMode = BGKF.db.profile.debugMode
+
   -- Store in modules for easy access
   BGKF.modules.KillFeed = self
 end
@@ -75,7 +78,7 @@ function KillFeed:CreateFrame()
   -- Add title text
   frame.titleText = frame.titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   frame.titleText:SetPoint("CENTER", frame.titleBar, "CENTER", 0, 0)
-  frame.titleText:SetText("BGKF Kill Feed")
+  frame.titleText:SetText("BG Kill Feed")
 
   -- Make title background to make it more visible for dragging
   frame.titleBg = frame.titleBar:CreateTexture(nil, "BACKGROUND")
@@ -267,9 +270,17 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
 
       -- Only add if we haven't processed this kill before
       if not self.processedKills[killID] then
+        -- Clean names for consistency
+        local cleanKillerName = self:RemoveServerName(killer)
+        local cleanVictimName = self:RemoveServerName(matchedVictim)
+
         -- Update killer's rank first
         if BGKF.db.profile.ranks.enabled and BGKF.modules.RankSystem then
-          BGKF.modules.RankSystem:UpdateRank(killer, 1) -- Increase rank
+          -- Update with both full and short names for compatibility
+          BGKF.modules.RankSystem:UpdateRank(killer, 1)
+          if cleanKillerName ~= killer then
+            BGKF.modules.RankSystem:UpdateRank(cleanKillerName, 1)
+          end
         end
 
         -- Create the kill feed entry - it will use the updated rank
@@ -277,12 +288,23 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
 
         -- Reset victim's rank
         if BGKF.db.profile.ranks.enabled and BGKF.db.profile.ranks.resetOnDeath and BGKF.modules.RankSystem then
-          BGKF.modules.RankSystem:UpdateRank(matchedVictim, 0) -- Reset rank
+          -- Update with both full and short names for compatibility
+          BGKF.modules.RankSystem:UpdateRank(matchedVictim, 0)
+          if cleanVictimName ~= matchedVictim then
+            BGKF.modules.RankSystem:UpdateRank(cleanVictimName, 0)
+          end
         end
 
         -- Play sound if enabled
         if BGKF.db.profile.sounds.enabled and BGKF.modules.SoundSystem then
-          BGKF.modules.SoundSystem:PlayKillSound(killer)
+          -- Check which method exists and use it
+          if BGKF.modules.SoundSystem.PlayRankSound then
+            BGKF.modules.SoundSystem:PlayRankSound(killer)
+          elseif BGKF.modules.SoundSystem.PlayKillSound then
+            BGKF.modules.SoundSystem:PlayKillSound(killer)
+          elseif BGKF.modules.SoundSystem.PlaySound then
+            BGKF.modules.SoundSystem:PlaySound("Rank1") -- Fallback to basic sound
+          end
         end
 
         -- Mark as processed
@@ -309,9 +331,15 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
 
       -- Only add if we haven't processed this kill before
       if not self.processedKills[killID] then
+        -- Clean name for consistency
+        local cleanKillerName = self:RemoveServerName(killer)
+
         -- Update killer's rank first
         if BGKF.db.profile.ranks.enabled and BGKF.modules.RankSystem then
-          BGKF.modules.RankSystem:UpdateRank(killer, 1) -- Increase rank
+          BGKF.modules.RankSystem:UpdateRank(killer, 1)
+          if cleanKillerName ~= killer then
+            BGKF.modules.RankSystem:UpdateRank(cleanKillerName, 1)
+          end
         end
 
         -- Create the generic kill feed entry
@@ -319,7 +347,14 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
 
         -- Play sound if enabled
         if BGKF.db.profile.sounds.enabled and BGKF.modules.SoundSystem then
-          BGKF.modules.SoundSystem:PlayKillSound(killer)
+          -- Check which method exists and use it
+          if BGKF.modules.SoundSystem.PlayRankSound then
+            BGKF.modules.SoundSystem:PlayRankSound(killer)
+          elseif BGKF.modules.SoundSystem.PlayKillSound then
+            BGKF.modules.SoundSystem:PlayKillSound(killer)
+          elseif BGKF.modules.SoundSystem.PlaySound then
+            BGKF.modules.SoundSystem:PlaySound("Rank1") -- Fallback to basic sound
+          end
         end
 
         -- Mark as processed
@@ -327,6 +362,9 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
       end
     end
   end
+
+  -- Clean up old tracking data (older than 60 seconds)
+  self:CleanupTrackingData()
 end
 
 -- Clean up old tracking data
@@ -373,6 +411,7 @@ function KillFeed:OnRankChanged(event, playerName)
   self:UpdateLayout()
 end
 
+-- Add a kill to the feed
 -- Add a kill to the feed
 function KillFeed:AddKill(killerName, killerClass, victimName, victimClass)
   local frame = self.frame
@@ -458,8 +497,20 @@ function KillFeed:AddKill(killerName, killerClass, victimName, victimClass)
 
   entry.text:SetText(timeText ..
     (config.showIcons and killerIcon or "") .. killerColoredName .. " " .. killerRankIcon .. "   killed   " ..
-    victimColoredName .. " " .. victimRankIcon .. (config.showIcons and victimIcon or ""))
+    victimColoredName .. (config.showIcons and victimIcon or ""))
   entry.text:SetPoint("LEFT", entry, "LEFT", 5, 0)
+
+  -- Trigger a sound event if the killer or victim is the local player
+  local playerName = UnitName("player")
+  if (killerName == playerName or cleanKillerName == playerName) and BGKF.modules.SoundSystem then
+    -- Play the rank-based sound
+    BGKF.modules.SoundSystem:PlayRankSound(playerName)
+  end
+
+  -- If the player was killed, play death sound
+  if (victimName == playerName or cleanVictimName == playerName) and BGKF.modules.SoundSystem then
+    BGKF.modules.SoundSystem:PlayDeathSound()
+  end
 
   -- Add to entries table and position it
   table.insert(frame.entries, entry) -- Add to end of list (oldest at top, newest at bottom)
@@ -537,6 +588,13 @@ function KillFeed:AddGenericKill(killerName, killerClass, enemyFaction)
     (config.showIcons and killerIcon or "") ..
     killerColoredName .. " " .. killerRankIcon .. "   killed an enemy " .. enemyFaction)
   entry.text:SetPoint("LEFT", entry, "LEFT", 5, 0)
+
+  -- Trigger a sound event if the killer is the local player
+  local playerName = UnitName("player")
+  if (killerName == playerName or cleanKillerName == playerName) and BGKF.modules.SoundSystem then
+    -- Play the rank-based sound
+    BGKF.modules.SoundSystem:PlayRankSound(playerName)
+  end
 
   -- Add to entries table and position it
   table.insert(frame.entries, entry) -- Add to end of list (oldest at top, newest at bottom)

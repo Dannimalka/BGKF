@@ -198,6 +198,19 @@ function Config:OnInitialize()
             type = "header",
             order = 11
           },
+          debugMode = {
+            name = "Debug Mode",
+            desc = "Enable debug messages in the chat frame (for addon development)",
+            type = "toggle",
+            width = "full",
+            order = 98,
+            get = function() return BGKF.db.profile.debugMode end, -- Changed
+            set = function(_, value)
+              BGKF.db.profile.debugMode = value                    -- Changed
+              -- Update debug mode in all modules
+              BGKF:UpdateDebugMode(value)
+            end
+          },
           updateFrequency = {
             name = "Update Frequency",
             desc = "How often to check for new kills (in seconds)",
@@ -320,8 +333,11 @@ function Config:OnInitialize()
             get = function() return BGKF.db.profile.sounds.killSound end,
             set = function(_, value)
               BGKF.db.profile.sounds.killSound = value
+              -- Test the sound in a safer way
               if BGKF.modules.SoundSystem and BGKF.modules.SoundSystem.PlaySound then
                 BGKF.modules.SoundSystem:PlaySound(value)
+              else
+                BGKF:Print("Sound system not available or PlaySound method missing")
               end
             end
           },

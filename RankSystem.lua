@@ -8,11 +8,14 @@ function RankSystem:OnInitialize()
   -- Create table to store player ranks
   self.playerRanks = {}
 
+  -- Add debug mode property
+  self.debugMode = BGKF.db.profile.debugMode
+
   -- Store in modules for easy access
   BGKF.modules.RankSystem = self
 
   -- Print debug message
-  BGKF:Print("RankSystem module initialized")
+  self:DebugPrint("RankSystem module initialized")
 
   -- Define standard PvP ranks by faction
   self.factionRanks = {
@@ -51,11 +54,18 @@ function RankSystem:OnInitialize()
   }
 end
 
+-- Debug print function
+function RankSystem:DebugPrint(...)
+  if self.debugMode then
+    BGKF:Print(...)
+  end
+end
+
 -- Enable module (when entering battleground)
 function RankSystem:OnEnable()
   -- Reset all ranks
   self.playerRanks = {}
-  BGKF:Print("RankSystem enabled - all ranks reset")
+  self:DebugPrint("RankSystem enabled - all ranks reset")
 
   -- Register player death event for rank resetting
   self:RegisterEvent("PLAYER_DEAD", "HandlePlayerDeath")
@@ -71,71 +81,91 @@ function RankSystem:OnDisable()
 
   -- Clear ranks
   self.playerRanks = {}
-  BGKF:Print("RankSystem disabled - all ranks cleared")
+  self:DebugPrint("RankSystem disabled - all ranks cleared")
 end
 
 -- Update a player's rank
 function RankSystem:UpdateRank(playerName, change)
   if not playerName then
-    BGKF:Print("UpdateRank called with nil playerName")
+    self:DebugPrint("UpdateRank called with nil playerName")
     return
   end
 
+  local normalizedName = BGKF:NormalizePlayerName(playerName)
+  self:DebugPrint("Updating rank for normalized name: " .. normalizedName)
+
   -- Initialize if needed
-  if not self.playerRanks[playerName] then
-    self.playerRanks[playerName] = 1
-    BGKF:Print("Initialized rank for " .. playerName .. " to 1")
+  if not self.playerRanks[normalizedName] then
+    self.playerRanks[normalizedName] = 1
   end
 
-  local oldRank = self.playerRanks[playerName]
+  local oldRank = self.playerRanks[normalizedName]
 
   if change > 0 then
     -- Increase rank (max 14)
-    self.playerRanks[playerName] = math.min(14, self.playerRanks[playerName] + change)
-
-    BGKF:Print(playerName .. " rank increased from " .. oldRank .. " to " .. self.playerRanks[playerName])
+    self.playerRanks[normalizedName] = math.min(14, self.playerRanks[normalizedName] + change)
 
     -- Announce rank up for player
-    if playerName == UnitName("player") and oldRank < self.playerRanks[playerName] then
-      local rankName = self:GetPlayerRankName(playerName)
-      BGKF:Print("You ranked up to: " .. rankName .. "!")
+    local playerNormalizedName = BGKF:NormalizePlayerName(UnitName("player"))
+    if normalizedName == playerNormalizedName then
+      local rankName = self:GetPlayerRankName(normalizedName)
+      self:DebugPrint("You ranked up to: " .. rankName .. "!")
 
       if BGKF.modules.SoundSystem then
-        BGKF.modules.SoundSystem:PlayRankUpSound()
+        BGKF.modules.SoundSystem:PlayRankSound(normalizedName)
       end
     end
+
+    self:DebugPrint(normalizedName .. " rank increased from " .. oldRank .. " to " .. self.playerRanks[normalizedName])
   elseif change <= 0 then
     -- Reset rank to 1
-    self.playerRanks[playerName] = 1
-
-    BGKF:Print(playerName .. " rank reset to 1")
+    self.playerRanks[normalizedName] = 1
 
     -- Announce rank reset for player
-    if playerName == UnitName("player") and BGKF.db.profile.ranks.resetOnDeath then
-      BGKF:Print("Your rank was reset to: " .. self:GetPlayerRankName(playerName))
+    local playerNormalizedName = BGKF:NormalizePlayerName(UnitName("player"))
+    if normalizedName == playerNormalizedName and BGKF.db.profile.ranks.resetOnDeath then
+      self:DebugPrint("Your rank was reset to: " .. self:GetPlayerRankName(normalizedName))
+    end
+
+    self:DebugPrint(normalizedName .. " rank reset to 1")
+  end
+
+  -- Always notify other modules of the rank change regardless of whether the rank actually changed
+  self:SendMessage("BGKF_RANK_CHANGED", normalizedName)
+
+  -- Debug output of all ranks after change
+  if self.debugMode then
+    self:DebugPrint("Current ranks:")
+    for name, rank in pairs(self.playerRanks) do
+      self:DebugPrint("  " .. name .. ": " .. rank)
     end
   end
 
-  -- Debug dump current ranks
-  BGKF:Print("Current ranks:")
-  for name, rank in pairs(self.playerRanks) do
-    BGKF:Print("  " .. name .. ": " .. rank)
+  -- Make sure nameplates get updated
+  if BGKF.modules.Nameplates then
+    if BGKF.modules.Nameplates.UpdateNameplateForPlayer then
+      BGKF.modules.Nameplates:UpdateNameplateForPlayer(normalizedName)
+    else
+      BGKF.modules.Nameplates:UpdateAllNameplates()
+    end
   end
-
-  -- Notify other modules of the rank change
-  BGKF:Print("Sending BGKF_RANK_CHANGED for " .. playerName)
-  self:SendMessage("BGKF_RANK_CHANGED", playerName)
 end
 
 -- Get a player's rank
 function RankSystem:GetPlayerRank(playerName)
-  if not playerName or not self.playerRanks[playerName] then
-    return 1 -- Default to rank 1
+  if not playerName then
+    return 1   -- Default to rank 1
   end
 
-  local rank = self.playerRanks[playerName]
-  BGKF:Print("GetPlayerRank for " .. playerName .. " = " .. rank)
-  return rank
+  local normalizedName = BGKF:NormalizePlayerName(playerName)
+
+  -- Try with the exact normalized name
+  if self.playerRanks[normalizedName] then
+    return self.playerRanks[normalizedName]
+  end
+
+  -- If we get here, we didn't find a rank
+  return 1 -- Default to rank 1
 end
 
 -- Get a player's rank name
@@ -162,7 +192,7 @@ end
 function RankSystem:HandlePlayerDeath()
   if BGKF.db.profile.ranks.resetOnDeath then
     local playerName = UnitName("player")
-    BGKF:Print("Player died: " .. playerName)
+    self:DebugPrint("Player died: " .. playerName)
     self:UpdateRank(playerName, 0) -- Reset rank
   end
 end
@@ -170,7 +200,7 @@ end
 -- Parse combat log to find deaths
 function RankSystem:ParseCombatLog()
   local timestamp, event, _, sourceGUID, sourceName, sourceFlags, _, destGUID, destName, destFlags =
-  CombatLogGetCurrentEventInfo()
+      CombatLogGetCurrentEventInfo()
 
   -- Check if this is a death event
   if event == "UNIT_DIED" then
@@ -178,7 +208,7 @@ function RankSystem:ParseCombatLog()
     if bit.band(destFlags, COMBATLOG_OBJECT_TYPE_PLAYER) > 0 then
       -- Reset rank if enabled
       if BGKF.db.profile.ranks.resetOnDeath then
-        BGKF:Print("Combat log detected player death: " .. destName)
+        self:DebugPrint("Combat log detected player death: " .. destName)
         self:UpdateRank(destName, 0)
       end
     end
@@ -187,6 +217,6 @@ end
 
 -- Update configuration (called when settings change)
 function RankSystem:UpdateConfig()
-  -- Nothing specific to update here
-  -- Ranks are always pulled from the current configuration
+  -- Update debug mode
+  self.debugMode = BGKF.db.profile.debugMode
 end

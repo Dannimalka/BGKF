@@ -1,8 +1,98 @@
--- Update for SoundSystem.lua
--- This function needs to be updated to work with the new KillFeed system
+-- BGKF: Improved Sound System Module with Rank Progression
 
--- Modify the PlayKillSound function to work with the improved kill detection
-function SoundSystem:PlayKillSound(playerName)
+local BGKF = LibStub("AceAddon-3.0"):GetAddon("BGKF")
+local SoundSystem = BGKF:NewModule("SoundSystem", "AceEvent-3.0")
+
+-- Module initialization
+function SoundSystem:OnInitialize()
+  -- Store player's previous rank for comparison
+  self.previousRank = 1
+
+  -- Debug mode
+  self.debugMode = BGKF.db.profile.debugMode
+
+  -- List of available kill sounds - just the essential 14 rank sounds
+  self.soundFiles = {
+    -- Basic sounds (ranks 1-3)
+    ["Rank1"] = "Sounds\\firstblood.ogg",
+    ["Rank2"] = "Sounds\\doublekill.ogg",
+    ["Rank3"] = "Sounds\\triplekill.ogg",
+
+    -- Mid-tier sounds (ranks 4-7)
+    ["Rank4"] = "Sounds\\multikill.ogg",
+    ["Rank5"] = "Sounds\\killingspree.ogg",
+    ["Rank6"] = "Sounds\\megakill.ogg",
+    ["Rank7"] = "Sounds\\rampage.ogg",
+
+    -- High-tier sounds (ranks 8-11)
+    ["Rank8"] = "Sounds\\ultrakill.ogg",
+    ["Rank9"] = "Sounds\\dominating.ogg",
+    ["Rank10"] = "Sounds\\monsterkill.ogg",
+    ["Rank11"] = "Sounds\\unstoppable.ogg",
+
+    -- Elite sounds (ranks 12-14)
+    ["Rank12"] = "Sounds\\godlike.ogg",
+    ["Rank13"] = "Sounds\\winner.ogg",
+    ["Rank14"] = "Sounds\\proceed.ogg",
+
+    -- Death sound
+    ["Death"] = "Sounds\\failed.ogg"
+  }
+
+  -- Register with BGKF modules
+  BGKF.modules.SoundSystem = self
+
+  -- Print initialization message
+  self:DebugPrint("SoundSystem module initialized with " .. self:GetSoundCount() .. " rank sounds")
+end
+
+-- Debug print function
+function SoundSystem:DebugPrint(...)
+  if self.debugMode then
+    BGKF:Print(...)
+  end
+end
+
+-- Get count of available sounds
+function SoundSystem:GetSoundCount()
+  local count = 0
+  for _ in pairs(self.soundFiles) do
+    count = count + 1
+  end
+  return count
+end
+
+-- Get list of available sounds for config
+function SoundSystem:GetSoundList()
+  local list = {}
+  for name, _ in pairs(self.soundFiles) do
+    list[name] = name
+  end
+  return list
+end
+
+-- Play a specific sound
+function SoundSystem:PlaySound(soundName)
+  -- Get the sound file path
+  local soundFile = self.soundFiles[soundName]
+  if not soundFile then
+    self:DebugPrint("Sound not found: " .. (soundName or "nil"))
+    return
+  end
+
+  -- Build the full path including the addon folder
+  local fullPath = "Interface\\AddOns\\BGKF\\" .. soundFile
+
+  -- Print debug message
+  self:DebugPrint("Playing sound: " .. soundName .. " (" .. fullPath .. ")")
+
+  -- Play the sound
+  PlaySoundFile(fullPath, "Master", BGKF.db.profile.sounds.volume or 1.0)
+end
+
+-- Play a rank sound based on player rank
+-- This is the key function that now plays the correct rank sound
+function SoundSystem:PlayRankSound(playerName)
   if not BGKF.db.profile.sounds.enabled then
     return
   end
@@ -12,107 +102,119 @@ function SoundSystem:PlayKillSound(playerName)
     return
   end
 
-  -- Initialize if needed
-  if not self.killStreaks[playerName] then
-    self.killStreaks[playerName] = {
-      count = 0,
-      lastKill = 0
-    }
+  -- Get player's rank from RankSystem
+  local rank = 1
+  if BGKF.modules.RankSystem then
+    rank = BGKF.modules.RankSystem:GetPlayerRank(playerName)
   end
 
-  local streak = self.killStreaks[playerName]
-  local currentTime = GetTime()
+  -- Clamp rank to 1-14 range
+  rank = math.max(1, math.min(14, rank))
 
-  -- Reset streak if too much time passed (10 seconds)
-  if currentTime - streak.lastKill > 10 and streak.count > 0 then
-    streak.count = 0
-  end
+  self:DebugPrint("Current rank: " .. rank .. ", Previous rank: " .. self.previousRank)
 
-  -- Increment streak
-  streak.count = streak.count + 1
-  streak.lastKill = currentTime
-
-  -- Get player's total kill count from the kill feed data
-  local killCount = 1
-  if BGKF.modules.KillFeed and
-      BGKF.modules.KillFeed.playerData and
-      BGKF.modules.KillFeed.playerData[playerName] then
-    killCount = BGKF.modules.KillFeed.playerData[playerName].killingBlows
-  end
-
-  -- Determine which sound to play based on kill count
-  local soundName = nil
-
-  -- First check if there's a special sound for this exact kill count
-  if self.killScoreSounds[killCount] then
-    soundName = self.killScoreSounds[killCount]
-  else
-    -- Otherwise use a sound based on streak
-    if streak.count == 1 then
-      -- For first kill in a streak, determine by kill count
-      if killCount >= 15 then
-        soundName = "Godlike"
-      elseif killCount >= 12 then
-        soundName = "Unstoppable"
-      elseif killCount >= 10 then
-        soundName = "Dominating"
-      elseif killCount >= 8 then
-        soundName = "Rampage"
-      elseif killCount >= 5 then
-        soundName = "KillingSpree"
-      elseif math.random(1, 10) == 1 then   -- 10% chance of headshot sound
-        soundName = "Headshot"
-      else
-        soundName = "FirstBlood"   -- Default to FirstBlood for single kills
-      end
-    elseif streak.count == 2 then
-      soundName = "DoubleKill"
-    elseif streak.count == 3 then
-      soundName = "TripleKill"
-    elseif streak.count == 4 then
-      soundName = "MultiKill"
-    elseif streak.count == 5 then
-      soundName = "MegaKill"
-    elseif streak.count == 6 then
-      soundName = "UltraKill"
-    elseif streak.count >= 7 then
-      soundName = "MonsterKill"
-    end
-  end
-
-  -- Play the sound
-  if soundName then
+  -- If rank increased, play the sound for the new rank
+  if rank > self.previousRank then
+    local soundName = "Rank" .. rank
     self:PlaySound(soundName)
-  end
+    self:DebugPrint("Rank increased! Playing " .. soundName)
 
-  -- Announce for player's own streaks
-  if streak.count > 1 then
-    local streakText = ""
-    if streak.count == 2 then
-      streakText = "Double Kill!"
-    elseif streak.count == 3 then
-      streakText = "Triple Kill!"
-    elseif streak.count == 4 then
-      streakText = "Multi Kill!"
-    elseif streak.count == 5 then
-      streakText = "Mega Kill!"
-    elseif streak.count == 6 then
-      streakText = "ULTRA KILL!"
-    elseif streak.count >= 7 then
-      streakText = "MONSTER KILL!!"
+    -- Get player's faction
+    local faction = UnitFactionGroup("player")
+
+    -- Get the rank name appropriate for the player's faction
+    local rankName = "Unknown"
+    if BGKF.modules.RankSystem and BGKF.modules.RankSystem.factionRanks and
+        BGKF.modules.RankSystem.factionRanks[faction] and
+        BGKF.modules.RankSystem.factionRanks[faction][rank] then
+      rankName = BGKF.modules.RankSystem.factionRanks[faction][rank]
     end
 
-    if streakText ~= "" then
-      BGKF:Print(streakText)
-    end
+    -- Print rank message for the player with the proper rank name
+    BGKF:Print("New rank achieved: " .. rankName .. "!")
+  else
+    -- If rank didn't increase but we killed someone, play the current rank sound
+    local soundName = "Rank" .. rank
+    self:PlaySound(soundName)
+    self:DebugPrint("Kill with current rank. Playing " .. soundName)
   end
 
-  -- Also print kill count milestone announcements
-  if killCount == 5 then
-    BGKF:Print("Killing Spree!")
-  elseif killCount == 10 then
-    BGKF:Print("DOMINATING!")
-  elseif killCount == 15 then
-    BGKF:Print("GODLIKE!!")
+  -- Store current rank for next comparison
+  self.previousRank = rank
+end
+
+-- Play death sound when player dies
+function SoundSystem:PlayDeathSound()
+  if BGKF.db.profile.sounds.enabled then
+    self:PlaySound("Death")
+    self:DebugPrint("Player died! Playing death sound")
+
+    -- Reset previous rank when we die
+    self.previousRank = 1
   end
+end
+
+-- Handle player death
+function SoundSystem:OnPlayerDeath()
+  self:PlayDeathSound()
+  self:DebugPrint("OnPlayerDeath triggered")
+end
+
+-- Compatibility function for older code
+function SoundSystem:PlayKillSound(playerName)
+  self:PlayRankSound(playerName)
+end
+
+-- Compatibility function for older code
+function SoundSystem:ResetKillStreak(playerName)
+  if playerName == UnitName("player") then
+    -- Store previous rank for messaging
+    local oldRank = self.previousRank
+
+    -- Reset the rank
+    self.previousRank = 1
+
+    -- Get player's faction
+    local faction = UnitFactionGroup("player")
+
+    -- Get the rank name appropriate for the player's faction
+    local rankName = "Private/Scout"
+    if oldRank > 1 and BGKF.modules.RankSystem and BGKF.modules.RankSystem.factionRanks and
+        BGKF.modules.RankSystem.factionRanks[faction] and
+        BGKF.modules.RankSystem.factionRanks[faction][1] then
+      rankName = BGKF.modules.RankSystem.factionRanks[faction][1]
+    end
+
+    -- Only display the message if we actually lost rank
+    if oldRank > 1 then
+      BGKF:Print("Rank reset to " .. rankName .. "!")
+    end
+
+    self:DebugPrint("Kill streak reset for " .. playerName)
+  end
+end
+
+-- Enable module
+function SoundSystem:OnEnable()
+  -- Register for events
+  self:RegisterEvent("PLAYER_DEAD", "OnPlayerDeath")
+
+  -- Reset previous rank
+  self.previousRank = 1
+
+  self:DebugPrint("SoundSystem enabled")
+end
+
+-- Disable module
+function SoundSystem:OnDisable()
+  -- Unregister all events
+  self:UnregisterAllEvents()
+
+  self:DebugPrint("SoundSystem disabled")
+end
+
+-- Update configuration (called when settings change)
+function SoundSystem:UpdateConfig()
+  -- Nothing specific to update here
+  -- Sound settings are checked each time a sound is played
 end
