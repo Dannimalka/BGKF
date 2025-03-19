@@ -29,7 +29,7 @@ BGKF.defaults = {
       showIcons = true,
       showTimestamp = true,
       backgroundColor = { r = 0, g = 0, b = 0, a = 0.5 },
-      updateFrequency = 1.0
+      updateFrequency = 0.4
     },
     sounds = {
       enabled = true,

@@ -94,16 +94,29 @@ function RankSystem:UpdateRank(playerName, change)
   local normalizedName = BGKF:NormalizePlayerName(playerName)
   self:DebugPrint("Updating rank for normalized name: " .. normalizedName)
 
+  -- Add debug output for initial state
+  if not self.playerRanks[normalizedName] then
+    self:DebugPrint("First time seeing player " .. normalizedName .. ", initializing rank")
+  else
+    self:DebugPrint("Current rank for " .. normalizedName .. ": " .. self.playerRanks[normalizedName])
+  end
+
   -- Initialize if needed
   if not self.playerRanks[normalizedName] then
-    self.playerRanks[normalizedName] = 1
+    self.playerRanks[normalizedName] = 1 -- Ensure players start at rank 1
   end
 
   local oldRank = self.playerRanks[normalizedName]
+  self:DebugPrint("Old rank: " .. oldRank .. " - Change requested: " .. change)
 
   if change > 0 then
-    -- Increase rank (max 14)
-    self.playerRanks[normalizedName] = math.min(14, self.playerRanks[normalizedName] + change)
+    -- Always increment by exactly 1
+    self.playerRanks[normalizedName] = math.min(14, self.playerRanks[normalizedName] + 1)
+
+    -- Debug output showing what changed
+    self:DebugPrint("RANK CHANGE: " .. normalizedName .. " from " .. oldRank ..
+      " to " .. self.playerRanks[normalizedName])
+    self:DebugPrint("New rank name: " .. self:GetPlayerRankName(normalizedName))
 
     -- Announce rank up for player
     local playerNormalizedName = BGKF:NormalizePlayerName(UnitName("player"))
@@ -115,31 +128,21 @@ function RankSystem:UpdateRank(playerName, change)
         BGKF.modules.SoundSystem:PlayRankSound(normalizedName)
       end
     end
-
-    self:DebugPrint(normalizedName .. " rank increased from " .. oldRank .. " to " .. self.playerRanks[normalizedName])
   elseif change <= 0 then
     -- Reset rank to 1
     self.playerRanks[normalizedName] = 1
+    self:DebugPrint("RANK RESET: " .. normalizedName .. " from " .. oldRank .. " to 1")
+    self:DebugPrint("New rank name: " .. self:GetPlayerRankName(normalizedName))
 
     -- Announce rank reset for player
     local playerNormalizedName = BGKF:NormalizePlayerName(UnitName("player"))
     if normalizedName == playerNormalizedName and BGKF.db.profile.ranks.resetOnDeath then
       self:DebugPrint("Your rank was reset to: " .. self:GetPlayerRankName(normalizedName))
     end
-
-    self:DebugPrint(normalizedName .. " rank reset to 1")
   end
 
-  -- Always notify other modules of the rank change regardless of whether the rank actually changed
+  -- Always notify other modules of the rank change
   self:SendMessage("BGKF_RANK_CHANGED", normalizedName)
-
-  -- Debug output of all ranks after change
-  if self.debugMode then
-    self:DebugPrint("Current ranks:")
-    for name, rank in pairs(self.playerRanks) do
-      self:DebugPrint("  " .. name .. ": " .. rank)
-    end
-  end
 
   -- Make sure nameplates get updated
   if BGKF.modules.Nameplates then
@@ -154,7 +157,7 @@ end
 -- Get a player's rank
 function RankSystem:GetPlayerRank(playerName)
   if not playerName then
-    return 1   -- Default to rank 1
+    return 1 -- Default to rank 1
   end
 
   local normalizedName = BGKF:NormalizePlayerName(playerName)
@@ -186,6 +189,33 @@ function RankSystem:GetPlayerRankName(playerName)
 
   -- Use appropriate rank name based on faction
   return self.factionRanks[faction][rankIndex] or self.factionRanks[faction][1]
+end
+
+function RankSystem:DebugRanks()
+  self:DebugPrint("==== DEBUG RANKS ====")
+  self:DebugPrint("Rank table contents:")
+
+  for name, rank in pairs(self.playerRanks) do
+    local displayRank = self:GetPlayerRankName(name)
+    self:DebugPrint(name .. ": Internal Rank = " .. rank .. ", Display = " .. displayRank)
+  end
+
+  -- Test cases
+  local testName = "TestPlayer"
+  self:DebugPrint("Test case for new player:")
+  self:DebugPrint("Initial rank for new player: " .. self:GetPlayerRank(testName))
+  self:DebugPrint("Initial rank name: " .. self:GetPlayerRankName(testName))
+
+  -- Test rank progression
+  self:DebugPrint("Testing rank progression:")
+  self.playerRanks[testName] = 1
+  for i = 1, 5 do
+    self:DebugPrint("Rank " .. self.playerRanks[testName] ..
+      " = " .. self:GetPlayerRankName(testName))
+    self.playerRanks[testName] = self.playerRanks[testName] + 1
+  end
+
+  self:DebugPrint("==== END DEBUG ====")
 end
 
 -- Handle player death

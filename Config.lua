@@ -355,14 +355,33 @@ function Config:OnInitialize()
 
   -- Add alliance rank display
   options.args.ranks.args.allianceRanksHeader = {
-    name = "Alliance Ranks",
+    name = "|TInterface\\TargetingFrame\\UI-PVP-Alliance:20:20:0:0:64:64:0:40:0:40|t Alliance Ranks",
     type = "header",
     order = 10
   }
 
-  for i = 1, 10 do
+  -- Hardcoded Alliance ranks with icons
+  local allianceRanks = {
+    [1] = "Private",
+    [2] = "Corporal",
+    [3] = "Sergeant",
+    [4] = "Master Sergeant",
+    [5] = "Sergeant Major",
+    [6] = "Knight",
+    [7] = "Knight-Lieutenant",
+    [8] = "Knight-Captain",
+    [9] = "Knight-Champion",
+    [10] = "Lieutenant Commander",
+    [11] = "Commander",
+    [12] = "Marshal",
+    [13] = "Field Marshal",
+    [14] = "Grand Marshal"
+  }
+
+  for i = 1, 14 do
+    local rankIcon = string.format("|TInterface\\PvPRankBadges\\PvPRank%02d:16:16:0:0|t", i)
     options.args.ranks.args["allianceRank" .. i] = {
-      name = "Rank " .. i,
+      name = rankIcon .. " " .. i .. ". " .. allianceRanks[i],
       desc = "Alliance rank " .. i,
       type = "description",
       order = 10 + i,
@@ -373,14 +392,33 @@ function Config:OnInitialize()
 
   -- Add horde rank display
   options.args.ranks.args.hordeRanksHeader = {
-    name = "Horde Ranks",
+    name = "|TInterface\\TargetingFrame\\UI-PVP-Horde:20:20:0:0:64:64:0:40:0:40|t Horde Ranks",
     type = "header",
     order = 30
   }
 
-  for i = 1, 10 do
+  -- Hardcoded Horde ranks with icons
+  local hordeRanks = {
+    [1] = "Scout",
+    [2] = "Grunt",
+    [3] = "Sergeant",
+    [4] = "Senior Sergeant",
+    [5] = "First Sergeant",
+    [6] = "Stone Guard",
+    [7] = "Blood Guard",
+    [8] = "Legionnaire",
+    [9] = "Centurion",
+    [10] = "Champion",
+    [11] = "Lieutenant General",
+    [12] = "General",
+    [13] = "Warlord",
+    [14] = "High Warlord"
+  }
+
+  for i = 1, 14 do
+    local rankIcon = string.format("|TInterface\\PvPRankBadges\\PvPRank%02d:16:16:0:0|t", i)
     options.args.ranks.args["hordeRank" .. i] = {
-      name = "Rank " .. i,
+      name = rankIcon .. " " .. i .. ". " .. hordeRanks[i],
       desc = "Horde rank " .. i,
       type = "description",
       order = 30 + i,
@@ -404,23 +442,9 @@ end
 
 -- Update config (called when settings change)
 function Config:UpdateConfig()
-  -- Update rank display info
-  if BGKF.modules.RankSystem then
-    local options = AceConfig:GetOptionsTable("BGKF")
-
-    -- Update Alliance ranks
-    for i = 1, 10 do
-      options.args.ranks.args["allianceRank" .. i].name = i .. ". " .. BGKF.modules.RankSystem.factionRanks.Alliance[i]
-    end
-
-    -- Update Horde ranks
-    for i = 1, 10 do
-      options.args.ranks.args["hordeRank" .. i].name = i .. ". " .. BGKF.modules.RankSystem.factionRanks.Horde[i]
-    end
-
-    -- Refresh config
-    AceConfig:NotifyChange("BGKF")
-  end
+  -- No need to update ranks since they're hardcoded
+  -- But we'll keep this for compatibility
+  AceConfig:NotifyChange("BGKF")
 end
 
 function Config:OnEnable()

@@ -72,6 +72,11 @@ end
 
 -- Get PvP rank icon for nameplates
 function Nameplates:GetRankIcon(playerName)
+  -- Check if ranks are enabled - if not, return an empty texture
+  if not BGKF.db.profile.ranks.enabled then
+    return ""
+  end
+
   local rankIndex = 1 -- Default to rank 1
   local normalizedName = BGKF:NormalizePlayerName(playerName)
 
@@ -156,13 +161,21 @@ end
 
 -- Add this function to your Nameplates.lua file
 function Nameplates:SetupPlayerFrameRank()
+  -- If ranks are disabled, hide the player rank frame and return
+  if not BGKF.db.profile.ranks.enabled then
+    if self.playerRankFrame then
+      self.playerRankFrame:Hide()
+    end
+    return
+  end
+
   -- Create a frame for the player's own rank
   if not self.playerRankFrame then
     local frame = CreateFrame("Frame", "BGKFPlayerRankFrame", PlayerFrame)
 
     -- Get the current player frame scale to determine appropriate size
     local parentScale = PlayerFrame:GetScale()
-    local baseSize = 16     -- Base size for the icon
+    local baseSize = 16   -- Base size for the icon
     local scaledSize = baseSize * parentScale
 
     frame:SetSize(scaledSize, scaledSize)
@@ -173,7 +186,7 @@ function Nameplates:SetupPlayerFrameRank()
 
     -- Position it to the LEFT of the player's level
     frame:ClearAllPoints()
-    frame:SetPoint("RIGHT", PlayerLevelText, "LEFT", -5, 0)     -- Position left of level text
+    frame:SetPoint("RIGHT", PlayerLevelText, "LEFT", -5, 0)   -- Position left of level text
 
     -- Create a scale update function
     frame.UpdateScale = function()
@@ -287,17 +300,20 @@ function Nameplates:ForceUpdateNameplate(unitToken, playerName)
   local iconPath = self:GetRankIcon(playerName)
   rankFrame.icon:SetTexture(iconPath)
 
+  -- Hide the frame if ranks are disabled or iconPath is empty
+  if not BGKF.db.profile.ranks.enabled or iconPath == "" then
+    rankFrame:Hide()
+    return -- Exit early since we're not showing the rank
+  else
+    rankFrame:Show()
+  end
+
   -- Ensure correct position - Position on right side of nameplate
   rankFrame:ClearAllPoints()
   rankFrame:SetPoint("RIGHT", nameplate, "RIGHT", 5, 0)
 
   -- Ensure proper parent
   rankFrame:SetParent(nameplate)
-
-  -- Show the frame
-  rankFrame:Show()
-
-  self:DebugPrint("Force updated nameplate for " .. playerName)
 end
 
 -- Parse combat log to catch player kills for rank updates

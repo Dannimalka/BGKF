@@ -239,7 +239,7 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
   if not next(newKillers) or not next(newVictims) then return end
 
   -- The match window (how close in time kill and death need to be)
-  local matchWindow = 3.0 -- seconds
+  local matchWindow = 1.2 -- seconds
 
   -- Keep track of which killers were matched to prevent duplicates
   local matchedKillers = {}
@@ -276,11 +276,9 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
 
         -- Update killer's rank first
         if BGKF.db.profile.ranks.enabled and BGKF.modules.RankSystem then
-          -- Update with both full and short names for compatibility
-          BGKF.modules.RankSystem:UpdateRank(killer, 1)
-          if cleanKillerName ~= killer then
-            BGKF.modules.RankSystem:UpdateRank(cleanKillerName, 1)
-          end
+          -- Only update once with the normalized name
+          cleanKillerName = self:RemoveServerName(killer)
+          BGKF.modules.RankSystem:UpdateRank(cleanKillerName, 1)
         end
 
         -- Create the kill feed entry - it will use the updated rank
@@ -336,10 +334,9 @@ function KillFeed:MatchKillersAndVictims(newKillers, newVictims)
 
         -- Update killer's rank first
         if BGKF.db.profile.ranks.enabled and BGKF.modules.RankSystem then
-          BGKF.modules.RankSystem:UpdateRank(killer, 1)
-          if cleanKillerName ~= killer then
-            BGKF.modules.RankSystem:UpdateRank(cleanKillerName, 1)
-          end
+          -- Only update once with the normalized name
+          cleanKillerName = self:RemoveServerName(killer)
+          BGKF.modules.RankSystem:UpdateRank(cleanKillerName, 1)
         end
 
         -- Create the generic kill feed entry
@@ -382,6 +379,11 @@ end
 
 -- Updated function to get PvP rank icons based on kill count and faction
 function KillFeed:GetPvPRankIcon(playerName)
+  -- If ranks are disabled, return empty string (no icon)
+  if not BGKF.db.profile.ranks.enabled then
+    return ""
+  end
+
   local rankIndex = 1 -- Default to rank 1
 
   -- Try to get player's rank from RankSystem

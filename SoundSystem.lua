@@ -13,32 +13,34 @@ function SoundSystem:OnInitialize()
 
   -- List of available kill sounds - just the essential 14 rank sounds
   self.soundFiles = {
-    -- Basic sounds (ranks 1-3)
-    ["Rank1"] = "Sounds\\firstblood.ogg",
-    ["Rank2"] = "Sounds\\doublekill.ogg",
-    ["Rank3"] = "Sounds\\triplekill.ogg",
+    -- Rank 1 starts with a placeholder (never actually played because you start at rank 1)
+    ["Rank1"] = "Sounds\\headshot.ogg", -- This is just a placeholder, rarely played
 
-    -- Mid-tier sounds (ranks 4-7)
-    ["Rank4"] = "Sounds\\multikill.ogg",
-    ["Rank5"] = "Sounds\\killingspree.ogg",
-    ["Rank6"] = "Sounds\\megakill.ogg",
-    ["Rank7"] = "Sounds\\rampage.ogg",
+    -- Rank 2-4 (Basic sounds)
+    ["Rank2"] = "Sounds\\firstblood.ogg",
+    ["Rank3"] = "Sounds\\doublekill.ogg",
+    ["Rank4"] = "Sounds\\triplekill.ogg",
 
-    -- High-tier sounds (ranks 8-11)
-    ["Rank8"] = "Sounds\\ultrakill.ogg",
-    ["Rank9"] = "Sounds\\dominating.ogg",
-    ["Rank10"] = "Sounds\\monsterkill.ogg",
-    ["Rank11"] = "Sounds\\unstoppable.ogg",
+    -- Rank 5-8 (Mid-tier sounds)
+    ["Rank5"] = "Sounds\\multikill.ogg",
+    ["Rank6"] = "Sounds\\killingspree.ogg",
+    ["Rank7"] = "Sounds\\megakill.ogg",
+    ["Rank8"] = "Sounds\\rampage.ogg",
 
-    -- Elite sounds (ranks 12-14)
-    ["Rank12"] = "Sounds\\godlike.ogg",
-    ["Rank13"] = "Sounds\\winner.ogg",
-    ["Rank14"] = "Sounds\\proceed.ogg",
+    -- Rank 9-12 (High-tier sounds)
+    ["Rank9"] = "Sounds\\ultrakill.ogg",
+    ["Rank10"] = "Sounds\\dominating.ogg",
+    ["Rank11"] = "Sounds\\monsterkill.ogg",
+    ["Rank12"] = "Sounds\\unstoppable.ogg",
 
-    -- Death sound
-    ["Death"] = "Sounds\\failed.ogg"
+    -- Rank 13-14 (Elite sounds)
+    ["Rank13"] = "Sounds\\godlike.ogg",
+    ["Rank14"] = "Sounds\\winner.ogg",
+
+    -- Special sounds
+    ["Death"] = "Sounds\\failed.ogg",
+    ["Headshot"] = "Sounds\\headshot.ogg"
   }
-
   -- Register with BGKF modules
   BGKF.modules.SoundSystem = self
 
@@ -99,6 +101,14 @@ function SoundSystem:PlayRankSound(playerName)
 
   -- Only play sounds for the player using the addon
   if playerName ~= UnitName("player") then
+    return
+  end
+
+  -- Check if ranks are disabled
+  if not BGKF.db.profile.ranks.enabled then
+    -- Play only headshot sound when ranks are disabled
+    self:PlaySound("Headshot")
+    self:DebugPrint("Ranks disabled - Playing headshot sound")
     return
   end
 
